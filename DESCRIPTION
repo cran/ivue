@@ -1,0 +1,34 @@
+Package: ivue
+Title: Interactive 3D Visualization of Data and Graphs
+Version: 0.1.0
+Authors@R: 
+    person("Pawel", "Gajer", email = "pgajer@gmail.com",
+           role = c("aut", "cre"))
+Description: Creates interactive three-dimensional point clouds and embedded
+    weighted graphs with numerical or categorical annotations.
+    Provides reusable continuous and categorical color scales, matching
+    legends, highlighting, and geometric edge, path, and label layers.
+    Supports multiple weighted-graph formats and optional layouts through
+    'igraph', with explicit distance or strength weight semantics. Renders
+    browser widgets using 'rgl' without requiring a native graphics window.
+    Plays recorded coordinate frames with interactive controls and exports
+    orthographic graph animations to GIF.
+License: GPL (>= 3)
+URL: https://pgajer.github.io/ivue/, https://github.com/pgajer/ivue
+BugReports: https://github.com/pgajer/ivue/issues
+Encoding: UTF-8
+Language: en-US
+Depends: R (>= 4.1.0)
+Imports: htmlwidgets, htmltools, grDevices, graphics, stats, utils,
+        methods
+Suggests: grip, rgl, magick, shiny, geometry, igraph, Matrix, callr,
+        pkgload, testthat (>= 3.1.7), knitr, rmarkdown
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0
+NeedsCompilation: no
+Packaged: 2026-09-18 18:05:06 UTC; pgajer
+Author: Pawel Gajer [aut, cre]
+Maintainer: Pawel Gajer <pgajer@gmail.com>
+Repository: CRAN
+Date/Publication: 2026-09-29 13:40:19 UTC

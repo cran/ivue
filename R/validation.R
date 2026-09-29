@@ -1,0 +1,109 @@
+.stop <- function(...) stop(..., call. = FALSE)
+
+.scalar <- function(x, name, lower = -Inf, upper = Inf, integer = FALSE) {
+    if (!is.numeric(x) || is.complex(x) || length(x) != 1L || !is.finite(x) ||
+        x < lower || x > upper || (integer && x != floor(x))) {
+        .stop(name, " must be a finite numeric scalar in [", lower, ", ", upper,
+              "]", if (integer) " and a whole number" else "", ".")
+    }
+    x
+}
+
+.flag <- function(x, name) {
+    if (!is.logical(x) || length(x) != 1L || is.na(x))
+        .stop(name, " must be TRUE or FALSE.")
+    x
+}
+
+.text <- function(x, name) {
+    if (!is.character(x) || length(x) != 1L || is.na(x))
+        .stop(name, " must be one string.")
+    x
+}
+
+.coordinates <- function(X) {
+    if (is.data.frame(X) && !all(vapply(X, is.numeric, logical(1))))
+        .stop("Every column of X must be numeric.")
+    if ((!is.matrix(X) && !is.data.frame(X)) || ncol(X) != 3L)
+        .stop("X must be a numeric matrix or data frame with exactly 3 columns.")
+    X <- as.matrix(X)
+    if (!is.numeric(X) || is.complex(X) || nrow(X) < 1L || any(!is.finite(X)))
+        .stop("X must contain at least one row of finite numeric coordinates.")
+    storage.mode(X) <- "double"
+    X
+}
+
+# Automatic data-frame row numbers are positions, not observation IDs.
+.point.coordinates <- function(X) {
+    automatic <- is.data.frame(X) && .row_names_info(X, 1L) < 0L
+    X <- .coordinates(X)
+    if (automatic) rownames(X) <- NULL
+    ids <- rownames(X)
+    if (!is.null(ids) && (anyNA(ids) || any(!nzchar(ids)) || anyDuplicated(ids)))
+        .stop("Coordinate row names must be unique, nonempty, nonmissing observation IDs.")
+    X
+}
+
+.align.named.data <- function(x, ids, name, id.type) {
+    keys <- names(x)
+    if (length(x) != length(ids) || anyNA(keys) || any(!nzchar(keys)) ||
+        anyDuplicated(keys) || !setequal(keys, ids))
+        .stop("Named ", name, " must match ", id.type,
+              " IDs exactly, without missing, duplicate, or extra names.")
+    x[match(ids, keys)]
+}
+
+.align.point.data <- function(x, X, name) {
+    if (is.null(names(x))) return(x)
+    ids <- rownames(X)
+    if (is.null(ids))
+        .stop("Named ", name, " requires explicit observation IDs in rownames(X); ",
+              "use unname() only when positional matching is intended.")
+    .align.named.data(x, ids, name, "observation")
+}
+
+.indices <- function(x, n, name) {
+    if (!is.numeric(x) || is.complex(x) || any(!is.finite(x)) || any(x != floor(x)) ||
+        any(x < 1 | x > n))
+        .stop(name, " must contain whole-number row indices between 1 and ", n, ".")
+    as.integer(x)
+}
+
+.colors <- function(x, n = length(x), name = "colors") {
+    if (!is.character(x) && !is.numeric(x)) .stop(name, " must contain R colors.")
+    if (anyNA(x) || !(length(x) %in% c(1L, n)))
+        .stop(name, " must have length 1 or ", n, " without missing entries.")
+    tryCatch(grDevices::col2rgb(x, alpha = TRUE),
+             error = function(e) .stop("Invalid ", name, ": ", conditionMessage(e)))
+    rep(x, length.out = n)
+}
+
+.named.list <- function(x, allowed, name) {
+    if (!is.list(x) || (length(x) && (is.null(names(x)) ||
+        anyNA(names(x)) || any(!nzchar(names(x))) || anyDuplicated(names(x)) ||
+        any(!names(x) %in% allowed))))
+        .stop(name, " must be a named list with unique keys from: ",
+              paste(allowed, collapse = ", "), ".")
+    x
+}
+
+.with.alpha <- function(col, alpha) {
+    rgba <- grDevices::col2rgb(col, alpha = TRUE) / 255
+    grDevices::rgb(rgba[1, ], rgba[2, ], rgba[3, ], rgba[4, ] * alpha)
+}
+
+.material.colors <- function(col, alpha = 1) {
+    rgba <- grDevices::col2rgb(col, alpha = TRUE) / 255
+    list(col = grDevices::rgb(rgba[1, ], rgba[2, ], rgba[3, ]),
+         alpha = rgba[4, ] * alpha)
+}
+
+.fixed.colors <- function(col, n = length(col), name = "colors") {
+    col <- .colors(col, n, name)
+    index <- if (is.numeric(col)) seq_along(col) else
+        which(!is.na(suppressWarnings(as.numeric(col))))
+    if (!length(index)) return(col)
+    rgba <- grDevices::col2rgb(col[index], alpha = TRUE) / 255
+    col[index] <- grDevices::rgb(rgba[1, ], rgba[2, ], rgba[3, ], rgba[4, ])
+    col
+}

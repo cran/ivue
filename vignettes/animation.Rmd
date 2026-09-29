@@ -1,0 +1,314 @@
+---
+title: "Playing and Exporting Coordinate Animations"
+output:
+  rmarkdown::html_vignette:
+vignette: >
+  %\VignetteIndexEntry{Playing and Exporting Coordinate Animations}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", out.width = "100%")
+library(ivue)
+have.rgl <- nzchar(system.file(package = "rgl"))
+have.magick <- requireNamespace("magick", quietly = TRUE)
+have.grip <- requireNamespace("grip", quietly = TRUE)
+```
+
+For a task index, see [Finding your way around ivue](function-guide.html);
+for small reproducible inputs, see [Example data and recipes](example-data.html).
+
+`animate.frames()` turns recorded coordinates into a browser player.
+`write.animation.gif()` exports the same retained frames to a GIF for a
+README, presentation, or website. Playback requires `rgl`; GIF export
+additionally requires `magick`:
+
+```{r installation, eval=FALSE}
+install.packages(c("rgl", "magick"))
+```
+
+**On this page:** [Watch a Sierpinski triangle unfold](#watch-a-sierpinski-triangle-unfold) · [Supply your own frames](#supply-your-own-frames) · [Animate a changing 3D surface](#animate-a-changing-3d-surface) · [Export interactive HTML](#export-interactive-html) · [Export a GIF](#export-a-gif) · [Control size and preserve diagnostic meaning](#control-size-and-preserve-diagnostic-meaning)
+
+## Watch a Sierpinski triangle unfold
+
+Generate a level-4 Sierpinski triangle graph, then record its two-dimensional
+layout with `grip::trace.grip()`. The optional `grip` package supplies both the
+graph constructor and the layout algorithm; install it with
+`install.packages("grip")` to run this example.
+
+```{r triangle-trace, eval=have.grip}
+edges <- grip::edges.sierpinski.triangle(level = 4)
+tr <- grip::trace.grip(
+  edges, n = max(edges), dim = 2, preset = "carpet", seed = 1,
+  trace = "round", trace.every = 1
+)
+length(tr$frames)
+dim(tr$frames[[1]])
+utils::packageVersion("grip")
+```
+
+The trace contains coordinates after successive layout rounds, including
+rows for vertices that have not yet been introduced. Select up to 24 evenly
+spaced frames, including the first and last, to keep the player compact.
+Retain their metadata and original frame numbers for the labels:
+
+```{r triangle-frame-selection, eval=have.grip}
+frame.index <- unique(as.integer(round(seq(
+  1, length(tr$frames), length.out = min(24L, length(tr$frames))
+))))
+triangle.frames <- tr$frames[frame.index]
+triangle.meta <- tr$meta[frame.index, , drop = FALSE]
+head(triangle.meta[, c("phase", "active_vertices")])
+triangle.labels <- paste0("Frame ", frame.index,
+                           " | ", triangle.meta$phase,
+                           " | ", triangle.meta$active_vertices, " vertices")
+```
+
+No coordinates are aligned to a target shape, rotated, or normalized. The seed
+fixes the random input to the installed GRIP implementation; the resulting
+trace can change between package versions, so its version is printed above.
+
+```{r triangle-player, eval=have.grip && have.rgl}
+triangle.player <- animate.frames(
+  triangle.frames, edges = edges, labels = triangle.labels,
+  fps = 5, col = "#C24E25", point.size = 4,
+  edge.col = "#314E6ECC", edge.width = 1,
+  background.color = "#FAF7F0", height = 450
+)
+triangle.player
+```
+
+```{r triangle-unavailable, echo=FALSE, results='asis'}
+if (!have.grip) cat("The GRIP example code is shown but not evaluated in this build because `grip` is unavailable. The small triangle and saddle examples below do not require it.\n\n")
+```
+
+Press **Play** to start; the button becomes **Pause**. Drag the slider to
+inspect a particular frame. With the slider focused, use the arrow keys to
+move one frame at a time. **Slower** and **Faster** change playback speed,
+**Reverse** changes direction, and **Reset** returns to the beginning.
+Drag inside the scene to rotate it, including during playback. The default
+2D camera looks straight down onto the xy plane.
+
+The recorded frames all have the same number of rows. A vertex that has not
+yet been introduced has an entirely missing (`NA` or `NaN`) row. Its point and all incident
+edges stay hidden until its coordinates are finite. Rows remain associated
+with the same vertices throughout playback; they must not be reordered.
+
+## Supply your own frames
+
+Frames are a list of numeric matrices with two or three columns. Every
+matrix must have identical dimensions. If row names are supplied, they must
+be unique and identical across frames. A row must be completely finite or
+completely missing (`NA` or `NaN`); partial missing coordinates and infinity
+are errors. GRIP records its inactive vertices using `NaN` rows.
+
+Here a triangle gains its third vertex and then expands. The second edge
+appears only when its missing endpoint is introduced.
+
+```{r small-example, eval=have.rgl}
+X <- rbind(a = c(0, 0), b = c(1, 0), c = c(0.5, 0.9))
+first <- X
+first[3, ] <- NA
+small <- animate.frames(
+  list(first, X, X * 1.4),
+  edges = rbind(c(1, 2), c(2, 3), c(3, 1)),
+  labels = c("Two vertices", "Triangle", "Expanded triangle"),
+  fps = 1, loop = FALSE, point.size = 9, height = 280
+)
+small
+```
+
+Vertices may disappear as well as appear. An entirely empty frame is
+allowed, provided at least one frame contains a finite point. The stricter
+finite-coordinate requirement of ordinary `plot3D` functions is unchanged.
+
+## Animate a changing 3D surface
+
+![Three static views show a plane, halfway deformation, and a saddle, using the same framing. Blue and red colors stay fixed and describe final saddle height, even in the flat frame.](figures/saddle-animation.png)
+
+The poster shows three of the recorded states below with a common spatial
+scale. All players start paused, including for readers who prefer reduced
+motion. Use the labeled frame slider with the arrow keys to inspect one frame
+at a time without starting playback.
+
+
+Any sequence satisfying the frame contract can be played. This example explicitly
+constructs a sequence from a plane to a saddle; it is an illustrative
+deformation, not the output of a layout optimizer. The xy positions and
+vertex identities are fixed while the height changes. A 7-by-7 grid and
+17 recorded amplitudes keep this installed example compact; the later
+paraboloid-to-saddle example uses 33 stages.
+
+```{r saddle-frames}
+side <- 7L
+grid <- expand.grid(x = seq(-1, 1, length.out = side),
+                    y = seq(-1, 1, length.out = side))
+amplitudes <- seq(0, 1.2, length.out = 17)
+saddle.frames <- lapply(amplitudes, function(a) {
+  cbind(x = grid$x, y = grid$y, z = a * (grid$x^2 - grid$y^2))
+})
+ids <- matrix(seq_len(nrow(grid)), side, side)
+saddle.edges <- rbind(
+  cbind(as.vector(ids[-side, ]), as.vector(ids[-1, ])),
+  cbind(as.vector(ids[, -side]), as.vector(ids[, -1]))
+)
+final.heights <- saddle.frames[[length(saddle.frames)]][, "z"]
+height.scale <- color.scale.cont(final.heights, center = 0,
+                                 palette = c("#2455A4", "#ECE6C2", "#B83232"))
+height.mapping <- map.colors(final.heights, height.scale)
+point.colors <- height.mapping$colors
+```
+
+```{r saddle-player, eval=have.rgl}
+saddle.player <- animate.frames(
+  saddle.frames, edges = saddle.edges,
+  labels = sprintf("Saddle amplitude = %.2f", amplitudes),
+  mapping = height.mapping, legend.title = "Final saddle height",
+  caption = "Color: final saddle height; positions: current frame.",
+  description = "Plane to saddle, with fixed colors for final saddle height.",
+  point.size = 6, edge.col = "#314E6E99",
+  camera = camera.zup(elevation = 25, turn = -130),
+  fps = 8, height = 450
+)
+saddle.player
+```
+
+Colors describe each vertex's **final saddle height** and remain fixed across
+frames. This makes identity easy to follow; they do not encode instantaneous
+height. Frame-dependent colors and animated mesh faces are outside this
+initial API. `edges` draws a wire grid without filling its faces.
+
+### From a paraboloid through a flat grid to a saddle
+
+Reuse the same grid, edges, and colors, but change the height formula to
+pass through three shapes. Let `t` run from -1 to 1 and set
+\[
+z(t) = 1.2\bigl(|t|x^2 - t y^2\bigr).
+\]
+At `t = -1` this is the upward-opening paraboloid
+`z = 1.2 * (x^2 + y^2)`. At `t = 0` all heights are zero, and at `t = 1`
+the surface is the saddle `z = 1.2 * (x^2 - y^2)`. An odd number of equally
+spaced frames places the flat grid exactly at the slider's midpoint.
+
+```{r surface-morph-frames}
+stages <- seq(-1, 1, length.out = 33)
+surface.frames <- lapply(stages, function(t) {
+  cbind(x = grid$x, y = grid$y,
+        z = 1.2 * (abs(t) * grid$x^2 - t * grid$y^2))
+})
+surface.labels <- sprintf("%s | t = %.2f",
+  ifelse(stages < 0, "Paraboloid", ifelse(stages == 0, "Flat grid", "Saddle")),
+  stages)
+```
+
+```{r surface-morph-player, eval=have.rgl}
+surface.player <- animate.frames(
+  surface.frames, edges = saddle.edges, labels = surface.labels,
+  mapping = height.mapping, legend.title = "Final saddle height",
+  caption = "Color: final saddle height; positions: current frame.",
+  description = "Paraboloid through a plane to a saddle, with fixed colors for final saddle height.",
+  point.size = 6, edge.col = "#314E6E99",
+  camera = camera.zup(elevation = 25, turn = -130),
+  fps = 8, height = 450
+)
+surface.player
+```
+
+Move the slider to the center to inspect the flat grid (frame 17 of 33).
+Use **Pause** to hold a view and **Reverse** to change the playback direction.
+Colors still represent final saddle height, not the height in the current frame.
+
+## Export interactive HTML
+
+The returned object is an ordinary htmlwidget. Saving it preserves the
+player, caption, readable color legend, and camera controls and does not require Shiny or a running R session
+for playback. No file is saved merely by constructing a player.
+
+```{r html-export, eval=FALSE}
+htmlwidgets::saveWidget(triangle.player, "triangle-playback.html", selfcontained = TRUE)
+htmlwidgets::saveWidget(saddle.player, "saddle-playback.html", selfcontained = TRUE)
+```
+
+Self-contained HTML requires Pandoc and bundles widget assets into one file.
+Use `selfcontained = FALSE` to save the HTML alongside a dependency folder;
+keep that folder with the HTML when sharing it.
+
+## Export a GIF
+
+Use `annotations = TRUE` to carry the fixed color legend and plain-text
+caption into the GIF. The raster renderer reserves space beside and below the
+scene; it does not capture arbitrary HTML. Text wraps at a readable size, and
+an export that cannot fit its annotations asks for larger dimensions.
+
+GIF export uses the frames retained in the player, including inactive
+vertices and edges. This build checks the small three-frame triangle; the
+larger trace can be exported with the same function in your own session.
+The example writes only temporary output and removes it after checking the
+file. No GIF asset is embedded in the installed guide.
+
+```{r gif-export, eval=have.rgl && have.magick}
+local({
+  gif.path <- tempfile(fileext = ".gif")
+  on.exit(unlink(gif.path))
+  write.animation.gif(small, gif.path, fps = 1,
+                       width = 240, height = 240, final.hold = 0)
+  stopifnot(file.exists(gif.path))
+})
+```
+
+```{r keep-gif, eval=FALSE}
+write.animation.gif(saddle.player, "saddle.gif", fps = 8,
+                     width = 720, height = 560, final.hold = 2,
+                     annotations = TRUE,
+                     loop = TRUE, overwrite = FALSE)
+```
+
+The GIF has the widget's **initial camera orientation**, not a rotation made
+later in the browser. Set `camera` explicitly when constructing the player to
+choose the exported view. Export requires an orthographic camera (`fov = 0`),
+which is the animation default. It renders a diagram from the recorded
+coordinates using R graphics and `magick`; it is not a screenshot of the
+WebGL scene. Smaller `camera$zoom` values enlarge the scene in both outputs.
+Use matching dimensions and annotation layouts when comparing GIF spatial
+scale; legend and caption space reduces the scene area. Point appearance can differ slightly. Edges are painted before
+points, so complex 3D intersections do not have WebGL depth-buffer semantics.
+
+The last frame has `final.hold` additional seconds per loop. GIF frame delays
+are rounded to centiseconds. Existing files are protected unless you set
+`overwrite = TRUE`.
+
+## Control size and preserve diagnostic meaning
+
+Playback changes only which recorded frame is displayed. It does not
+interpolate missing frames, align to a target, or recenter each frame. All
+original frames determine one fixed viewing box, so translation, contraction,
+and expansion remain visible. Rotating or zooming the camera changes the
+view, not the stored coordinates.
+
+By default, at most 100 evenly spaced frames are retained, including the
+first and last. If this limit is exceeded, a message reports the subsampling.
+For a diagnostic inspection, choose frames explicitly or retain all of them:
+
+```{r frame-selection, eval=have.grip && have.rgl}
+inspect.index <- unique(as.integer(round(seq(
+  1, length(triangle.frames), length.out = min(5L, length(triangle.frames))
+))))
+selected <- animate.frames(triangle.frames, edges,
+                            frame.index = inspect.index,
+                            labels = triangle.labels, fps = 2)
+attr(selected, "ivue.animation")$frame.index
+```
+
+```{r all-frames, eval=FALSE}
+all.frames <- animate.frames(my.frames, edges = my.edges, max.frames = NULL)
+```
+
+Every retained frame has equal duration. A subsampled animation therefore
+shows the order of the solve, not elapsed computation time. Widget size grows
+with both frame count and graph size; large traces benefit from an explicit
+selection. The exported GIF uses that same selection.
+
+The same interface accepts three-dimensional traces and frames recorded by
+other solvers. Neither `animate.frames()` nor GIF export calls `grip` or
+computes a layout.

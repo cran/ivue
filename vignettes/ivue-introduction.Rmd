@@ -1,0 +1,533 @@
+---
+title: "Point Clouds and Weighted Graphs with ivue"
+output:
+  rmarkdown::html_vignette:
+vignette: >
+  %\VignetteIndexEntry{Point Clouds and Weighted Graphs with ivue}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 5)
+library(ivue)
+have.rgl <- nzchar(system.file(package = "rgl"))
+have.geometry <- requireNamespace("geometry", quietly = TRUE)
+```
+
+For a task index, see [Finding your way around ivue](function-guide.html);
+for small reproducible inputs, see [Example data and recipes](example-data.html).
+
+**On this page:** [A sample from a saddle](#a-sample-from-a-saddle) · [Reusable numerical colors](#reusable-numerical-colors) · [Textbook-style axes and a z-up camera](#textbook-style-axes-and-a-z-up-camera) · [A triangular mesh beneath the spheres](#a-triangular-mesh-beneath-the-spheres) · [Groups and highlighting](#groups-and-highlighting) · [A gridded reference surface](#a-gridded-reference-surface) · [Weighted graphs and geometric layers](#weighted-graphs-and-geometric-layers) · [Cameras, metadata, and export](#cameras-metadata-and-export)
+
+## A sample from a saddle
+
+![Static orthographic view of 250 green points on a saddle, whose opposing sides curve upward and downward.](figures/saddle-points.png)
+
+The poster uses the same observations as the first interactive example below.
+It shows the saddle shape without requiring scripts or WebGL; it is a static
+projection, with no interactive rotation.
+
+
+The input is an `n x 3` numeric matrix, or an all-numeric data frame. Each row
+is one observation. Coordinates must be finite; ivue does not silently drop
+rows with missing coordinates.
+
+Explicit coordinate row names are observation IDs. Named `values`, `groups`,
+point colors, logical highlight masks, and style colors match those IDs exactly,
+as in graph plots; missing, duplicate, or extra names cause errors. Unnamed
+vectors follow row position. Use `unname()` deliberately if annotation names
+are not IDs. Point coordinates and indexed layers keep their supplied row order.
+
+```{r saddle-data}
+set.seed(1)
+xs <- runif(250, -1, 1)
+ys <- runif(250, -1, 1)
+zs <- 1.2 * (xs^2 - ys^2)
+X <- cbind(x = xs, y = ys, z = zs)
+```
+
+`plot3D.plain()` uses `rgl` to create an interactive browser widget. Assigning
+the result to `plain` defers viewing; the final `plain` expression displays it
+in this vignette, in RStudio's Viewer, or in a browser from an interactive R
+console. Scene creation uses an off-screen device, so no native graphics
+window is needed.
+
+All `plot3D` functions start with z pointing upward and x and y in the
+horizontal data plane. The default is `camera.zup(elevation = 20, turn = -135,
+fov = 0, zoom = 0.8)`: an orthographic view with positive x down-left and
+positive y down-right on screen. Dragging the widget can change this orientation.
+
+```{r saddle-plain, eval=have.rgl}
+plain <- plot3D.plain(X, col = "#197A68", point.size = 5,
+                     axes = TRUE, xlab = "x", ylab = "y", zlab = "z",
+                     description = "250 green observations on a saddle; opposite sides curve upward and downward.")
+plain
+```
+
+`point.size` is a screen-pixel size. Spheres are a separate primitive, with
+`point.type = "sphere"` and `sphere.radius` measured in coordinate units.
+For example, `plot3D.plain(X, point.type = "sphere", sphere.radius = 0.02)`
+draws spheres of radius 0.02. A missing radius uses one percent of the largest
+coordinate span. Dense sphere scenes can be much more expensive than points.
+
+The default `aspect = "equal"` preserves equal units across axes. Choose
+`aspect = "normalized"` only when stretching axes independently is intended;
+it changes relative geometric distances.
+
+## Reusable numerical colors
+
+Continuous interpolation is the default. Here zero has a scientific meaning,
+so we specify both a center and a diverging palette. Automatic limits become
+symmetric around that center. Creating a scale and inspecting its color and
+legend mappings do not require `rgl` or open a plot.
+
+```{r height-scale}
+height.scale <- color.scale.cont(zs, center = 0,
+  palette = c("#2166AC", "#F7F7F7", "#B2182B"))
+mapping <- map.colors(zs, height.scale)
+head(mapping$colors)
+mapping$legend
+```
+
+```{r saddle-continuous, eval=have.rgl}
+colored <- plot3D.cont(X, values = zs, scale = height.scale,
+                       point.size = 5, legend.title = "Saddle height")
+colored
+```
+
+Construct one scale from a reference sample and reuse it to compare plots.
+`limits` fixes the numerical range. Values outside it are squished by default;
+`oob = "censor"` maps them to the missing color, while `oob = "error"` rejects
+them. Missing values use `na.color` without removing coordinate rows.
+
+For binned colors, request them explicitly. Break calculations retain full
+precision. The default `digits = NULL` increases legend precision until nearby
+boundaries are distinguishable; an explicit `digits` fixes precision and warns
+if labels are ambiguous. There is no automatic
+winsorization. `center` is a continuous-scale control; for binned diverging
+colors, supply the intended breaks and bin colors directly.
+
+```{r binned-scale}
+binned <- color.scale.cont(zs, mode = "binned",
+  breaks = c(-1.2, -0.4, 0.4, 1.2),
+  palette = c("#2166AC", "#EEEEEE", "#B2182B"))
+map.colors(zs, binned)$legend
+```
+
+`palette` can be a vector of colors or a function of the requested number of
+colors. `color.map` instead receives numerical values and must return one
+color per value. Do not supply both. Numeric palette indices, including missing
+colors, are fixed when a scale is fitted, so later changes to R's `palette()`
+do not change its colors. A `color.map` callback is run at mapping time; its
+dependence on mutable external state remains the caller's responsibility.
+
+## Textbook-style axes and a z-up camera
+
+The earlier saddle sample is uniform in its horizontal parameter square, not
+in surface area. For `z = C * (x^2 - y^2)`, the surface-area factor is
+`sqrt(1 + 4*C^2*(x^2 + y^2))`. Accepting uniform-square proposals with probability
+proportional to this factor gives a surface-area-uniform sample. Batches
+accumulate until there are at least `n` accepted points; the final line retains
+exactly `n` of them.
+
+```{r area-uniform-saddle}
+set.seed(1)
+n <- 500
+C <- 0.8
+half.width <- 1
+xy <- matrix(numeric(), ncol = 2)
+while (nrow(xy) < n) {
+  proposal <- matrix(runif(4000, -half.width, half.width), ncol = 2)
+  area <- sqrt(1 + 4*C^2 * rowSums(proposal^2))
+  accept <- runif(nrow(proposal)) < area / sqrt(1 + 8*C^2*half.width^2)
+  xy <- rbind(xy, proposal[accept, , drop = FALSE])
+}
+xy <- xy[seq_len(n), , drop = FALSE]
+saddle <- cbind(x = xy[, 1], y = xy[, 2],
+                z = C * (xy[, 1]^2 - xy[, 2]^2))
+byr.scale <- color.scale.cont(saddle[, "z"], center = 0,
+                               palette = c("blue", "yellow", "red"))
+```
+
+`layer3D.axes()` adds three axes through the origin, with arrowheads at their
+positive ends. It does not rotate the data or choose a camera. The example
+below keeps the default z-up orientation and uses `zoom = 0.4` to leave room
+for the origin-crossing axes and legend:
+
+```{r saddle-coordinate-axes, eval=have.rgl}
+saddle.view <- plot3D.cont(
+  saddle, values = saddle[, "z"], scale = byr.scale,
+  point.type = "sphere", sphere.radius = 0.02,
+  legend.title = "Saddle height", legend.width = 160,
+  axes = FALSE, aspect = "equal",
+  layers = list(layer3D.axes(head.length = 0.04, head.angle = pi/8)),
+  camera = camera.zup(elevation = 20, turn = -135, fov = 0, zoom = 0.4),
+  height = 500L
+)
+```
+
+```{r saddle-coordinate-display, eval=have.rgl, echo=FALSE}
+# Keep the enlarged scene in a 7:5 frame when the vignette column narrows.
+# Move the legend above the frame on small screens rather than hiding data.
+saddle.view$elementId <- "saddle-coordinate-example"
+htmltools::tagList(
+  htmltools::tags$style(htmltools::HTML("
+    #saddle-coordinate-example, #saddle-mesh-example, #saddle-mesh-groups-example,
+    #reference-surface-example {
+      height: auto !important; aspect-ratio: 7 / 5;
+    }
+    @media (max-width: 600px) {
+      #saddle-coordinate-example, #saddle-mesh-example,
+      #reference-surface-example { margin-top: 160px; }
+      #saddle-coordinate-example > .ivue-legend,
+      #saddle-mesh-example > .ivue-legend,
+      #reference-surface-example > .ivue-legend {
+        top: -155px !important; max-height: none !important;
+      }
+      #saddle-mesh-groups-example { margin-top: 100px; }
+      #saddle-mesh-groups-example > .ivue-legend {
+        top: -95px !important; max-height: none !important;
+      }
+    }
+  ")),
+  saddle.view
+)
+```
+
+Zero is yellow; negative and positive heights move toward blue and red,
+respectively. `scale` takes a color-scale object, not a raw color vector.
+Reusing `byr.scale` and the original height values preserves observation colors
+if these points are subsequently displayed in another coordinate configuration.
+
+The axes extend beyond the data automatically. Set `origin` to move their
+intersection, or use explicit `limits`, for example
+`rbind(x = c(-1.2, 1.2), y = c(-1.2, 1.2), z = c(-1, 1))`, to fix endpoints
+across views. These limits do not clip data. `head.length` is a fraction of the
+full axis span; `head.angle` is the cone half-angle in radians. `width`, `col`,
+`cex`, and `label.offset` control the shafts, colors, label size, and label gaps.
+The heads are solid cones in data coordinates, so they keep their 3D geometry
+while the widget rotates. Use equal aspect to preserve their proportions.
+
+With `turn = -135`, positive x points down-left and positive y down-right.
+With `turn = 0`, positive x is horizontal to the right and positive y recedes.
+`elevation` changes the angle above the xy plane; `fov = 0` removes perspective.
+The helper only specifies the initial view: dragging can still tilt z, and at
+elevations of plus or minus 90 degrees z points along the viewing direction.
+Neither the axes constructor nor the camera helper needs rgl until a plot is
+actually drawn. The same layer and camera also work with `plot3D.graph()`.
+
+## A triangular mesh beneath the spheres
+
+![Static view of triangular faces connecting the 500 saddle observations. Point colors encode height: blue below zero, yellow at zero, and red above zero.](figures/saddle-mesh.png)
+
+This poster projects the same sample and triangulation used below. It is a
+flat diagram of the geometry; it does not reproduce WebGL lighting or spheres.
+
+
+Connecting neighboring observations with triangular faces makes the saddle's
+shape easier to see. Construct a Delaunay triangulation in the original
+two-dimensional parameter plane, then draw its faces at the three-dimensional
+saddle coordinates. Triangulating the 3D coordinates instead would construct
+a different object, not this surface mesh.
+
+The `geometry` package is an add-on, not part of base R. Install it with
+`install.packages("geometry")` to run this example. It is suggested for the
+vignette, but `layer3D.mesh()` does not require it when triangle indices are
+already available. The example below is evaluated when both `geometry` and
+`rgl` are installed.
+
+```{r saddle-triangulation, eval=have.geometry}
+triangles <- geometry::delaunayn(saddle[, c("x", "y")])
+surface <- layer3D.mesh(
+  triangles, col = "gray75", alpha = 0.2,
+  edge.col = "gray45", edge.alpha = 0.35, edge.width = 1
+)
+```
+
+Each row of `triangles` contains three indices into `saddle`. The mesh joins
+those observations with planar faces, approximating the surface over the
+sample's parameter-space convex hull. It does not extend to unsampled corners
+of the square. The points, colors, axes, and initial camera below are the same
+as in the preceding plot.
+
+```{r saddle-mesh, eval=have.rgl && have.geometry}
+saddle.mesh <- plot3D.cont(
+  saddle, description = "500 saddle observations joined by triangular faces; blue is below zero, yellow is zero, red is above zero.", values = saddle[, "z"], scale = byr.scale,
+  point.type = "sphere", sphere.radius = 0.02,
+  legend.title = "Saddle height", legend.width = 160,
+  axes = FALSE, aspect = "equal",
+  layers = list(surface, layer3D.axes()),
+  camera = camera.zup(elevation = 20, turn = -135, fov = 0, zoom = 0.4),
+  height = 500L
+)
+```
+
+```{r saddle-mesh-display, eval=have.rgl && have.geometry, echo=FALSE}
+saddle.mesh$elementId <- "saddle-mesh-example"
+saddle.mesh
+```
+
+`alpha` controls face opacity; `edge.alpha` independently controls the mesh
+lines. Shared edges are drawn once. Set `alpha = 0` for a wireframe or
+`edges = FALSE` to show faces without their outlines.
+
+To inspect another embedding of these same observations, retain `surface`
+and replace only the plotting coordinates. For example, if `Z` contains the
+metric-MDS or metric-MDS-followed-by-edge-KK coordinates in the same row order:
+
+```{r mesh-other-embedding, eval=FALSE}
+plot3D.cont(
+  Z, values = saddle[, "z"], scale = byr.scale,
+  point.type = "sphere", sphere.radius = 0.02, axes = FALSE,
+  layers = list(surface, layer3D.axes()), camera = camera.zup()
+)
+```
+
+Do not retriangulate `Z`: fixed triangle connectivity reveals how the original
+mesh stretches, folds, or collapses. Original heights continue to determine
+point colors. The mesh is a visualization overlay, separate from any
+symmetric-kNN graph used for fitting or fidelity scoring; adding it does not
+change that graph or its objectives.
+
+## Groups and highlighting
+
+Groups need not be clusters. Factors retain their level order; other vectors
+use first-occurrence order. Named colors make the assignment explicit and
+stable across datasets. Unknown groups raise an error unless the scale uses
+`unknown = "missing"`. Missing factor levels are treated as missing, not as
+the literal group `"NA"`. Empty strings remain valid groups. Legends quote
+group labels when needed to distinguish an empty label or a group called
+`"Missing"` from the missing-value entry.
+
+First, color and highlight the original 250-point sample. Then reuse the same
+group scale on the mesh-backed saddle below.
+
+```{r group-scale}
+groups <- factor(ifelse(zs < 0, "Negative", "Nonnegative"),
+                 levels = c("Negative", "Nonnegative"))
+group.scale <- color.scale.groups(groups,
+  colors = c(Negative = "#D95479", Nonnegative = "#009F87"))
+map.colors(groups, group.scale)$legend
+```
+
+```{r saddle-groups, eval=have.rgl}
+plot3D.groups(X, groups, scale = group.scale, point.size = 5,
+  highlight = abs(zs) > 0.4,
+  highlight.style = list(point.size = 7),
+  non.highlight.style = list(col = "gray75", alpha = 0.25))
+```
+
+`highlight` changes styling, not membership: all 250 rows keep their original
+IDs and the color scale is not refitted. Legends describe the base color scale
+and global `alpha`, not the per-highlight overrides. Scale colors can include
+alpha, and global `alpha` multiplies it. A highlight-style `alpha` overrides
+the global multiplier for that subset, while preserving its color's alpha.
+
+### Groups on the mesh-backed saddle
+
+`plot3D.groups()` accepts the same sphere, mesh, axis, and camera controls as
+`plot3D.cont()`. To color the preceding mesh-backed saddle by group, replace
+the continuous `values` and `byr.scale` with group labels and `group.scale`.
+Derive the labels from `saddle`, which has 500 rows, rather than reusing the
+250 labels associated with `X`:
+
+```{r saddle-mesh-group-labels}
+saddle.groups <- factor(ifelse(saddle[, "z"] < 0, "Negative", "Nonnegative"),
+                        levels = c("Negative", "Nonnegative"))
+```
+
+```{r saddle-mesh-groups, eval=have.rgl && have.geometry}
+saddle.mesh.groups <- plot3D.groups(
+  saddle, groups = saddle.groups, scale = group.scale,
+  point.type = "sphere", sphere.radius = 0.02,
+  legend.title = "Height group", legend.width = 160,
+  axes = FALSE, aspect = "equal",
+  layers = list(surface, layer3D.axes()),
+  camera = camera.zup(elevation = 20, turn = -135, fov = 0, zoom = 0.4),
+  height = 500L
+)
+```
+
+```{r saddle-mesh-groups-display, eval=have.rgl && have.geometry, echo=FALSE}
+saddle.mesh.groups$elementId <- "saddle-mesh-groups-example"
+saddle.mesh.groups
+```
+
+Negative-height spheres are pink and nonnegative-height spheres are green,
+using the same named colors as the simpler example. The gray surface, mesh
+connectivity, sphere radii, axes, and camera are unchanged from `saddle.mesh`;
+only the point coloring and legend differ. Here all points retain their group
+colors, without highlighting. Reusing `surface` does not require another
+triangulation.
+
+## A gridded reference surface
+
+The triangular mesh above follows the plotted observations. When a surface
+is known analytically, `layer3D.surface()` can instead draw a reference with
+its own coordinates. Here the original 250-point sample `X` lies on
+`z = 1.2 * (x^2 - y^2)`; evaluate that formula on a regular grid covering its
+parameter square:
+
+```{r reference-surface}
+grid.x <- grid.y <- seq(-1, 1, length.out = 31)
+grid.z <- outer(grid.x, grid.y, function(x, y) 1.2 * (x^2 - y^2))
+reference <- layer3D.surface(grid.x, grid.y, grid.z,
+                              col = "lightblue", alpha = 0.3)
+```
+
+Entry `grid.z[i, j]` is the height at `(grid.x[i], grid.y[j])`. No
+triangulation call or `geometry` installation is needed. Overlay the
+reference beneath the sample, reusing the earlier height scale:
+
+```{r reference-surface-player, eval=have.rgl}
+reference.view <- plot3D.cont(
+  X, values = X[, "z"], scale = height.scale, point.size = 5,
+  legend.title = "Saddle height", legend.width = 160, axes = FALSE,
+  layers = list(reference, layer3D.axes()),
+  camera = camera.zup(zoom = 0.6), height = 450
+)
+```
+
+```{r reference-surface-display, eval=have.rgl, echo=FALSE}
+reference.view$elementId <- "reference-surface-example"
+reference.view
+```
+
+Set `edges = TRUE` in `layer3D.surface()` for grid lines and `lit = TRUE`
+for lighting. Faces are planar triangles; increasing grid resolution
+approximates the smooth surface more closely. Unlike the earlier mesh,
+`reference` stays fixed when reused with another set of plotting coordinates.
+To compare an MDS or refined embedding against it, first align the embedding
+to the reference coordinate system. The layer performs no alignment or
+rescaling and does not modify the graph used to compute the embedding.
+
+## Weighted graphs and geometric layers
+
+A graph supplies topology and weights. Coordinates supply geometry; one does
+not substitute for the other. The following graph contains an isolated vertex.
+
+```{r graph-data}
+vertices <- data.frame(id = c("A", "B", "C", "D"),
+                       label = c("Start", "Middle", "End", "Isolate"))
+edges <- data.frame(from = c("A", "B"), to = c("B", "C"), weight = c(2, 4))
+coords <- rbind(A = c(0, 0, 0), B = c(1, 1, 0),
+                C = c(2, 0, 1), D = c(0, 2, 1))
+graph <- prepare.graph(edges, vertices = vertices, weight.type = "distance")
+graph$edges
+coords <- coords[c("C", "A", "D", "B"), ]
+values <- c(D = 40, B = 20, A = 10, C = 30)
+```
+
+```{r embedded-graph, eval=have.rgl}
+plot3D.graph(graph, X = coords, values = values, edge.col = "gray50",
+  edge.width = 1 + graph$edges$weight,
+  point.type = "sphere", sphere.radius = 0.07,
+  layers = list(layer3D.path(c(1, 2, 3), col = "#D55E00", width = 4),
+                layer3D.labels(1:4, vertices$label, offset = c(0, 0, 0.15))))
+```
+
+The other accepted formats are paired `adj.list`/`weight.list` lists, dense or
+sparse adjacency matrices, and igraph objects. Sparse matrix inputs require
+`Matrix`; igraph inputs require `igraph`. Preparing a graph with
+`prepare.graph()` does not require `rgl`. For the same graph:
+
+```{r adjacency-list}
+adjacency <- list(
+  adj.list = list(A = 2L, B = c(1L, 3L), C = 2L, D = integer()),
+  weight.list = list(A = 2, B = c(2, 4), C = 4, D = numeric()))
+```
+
+Undirected adjacency entries must be reciprocal, with matching weights.
+Matrices use zero to mean no edge; use tables or lists for actual zero-weight
+edges. Coordinate row names are aligned to vertex IDs. Without row names,
+coordinates follow vertex order. Named values and groups are independently
+aligned by exact vertex ID, as in the shuffled example above. Unnamed annotation
+vectors follow vertex order. Duplicate, missing, partial, and extra names are
+rejected. Named point colors, highlight-style color vectors, and logical
+highlight masks use the same rule. Layer row indices and numeric highlight
+indices refer to graph vertex order after alignment.
+
+Weights do not automatically control edge width or color. The example chooses
+`1 + graph$edges$weight` explicitly. Edge colors and widths follow the edge order
+exposed by `prepare.graph()` before rendering; matrix/list inputs use one copy of each
+undirected edge in vertex-row order. Table inputs retain their supplied order.
+
+Prepared graphs can be reused across plots. Vertex identities, isolates,
+weights, and vertex and edge table attributes are retained. Integer edge
+endpoints index the prepared vertex table: to change vertex order, prepare a
+new graph from vertex IDs rather than reorder that table in place.
+
+ivue can display coordinates produced by `dgraphs`, `grip`, `igraph`,
+[`graphlayouts`](https://schochastics.github.io/graphlayouts/), or other
+embedding tools. Choose a method that returns three-dimensional coordinates,
+then supply them through `X`; ivue renders the result without recomputing the
+layout. Examples include spectral embeddings from `dgraphs`, multiscale layouts
+from `grip`, and three-dimensional stress layouts from
+[`graphlayouts::layout_with_stress3D()`](https://schochastics.github.io/graphlayouts/reference/layout_stress3D.html).
+Not every layout in these packages supports three dimensions. The coordinate
+matrix must have three columns, with rows matched to graph vertices as
+described above. For table, list, or matrix graph inputs, supplying `X` also
+avoids constructing an igraph object.
+
+Alternatively, let ivue compute coordinates by supplying `layout` instead of
+`X`. The built-in choices `"kk"` and `"fr"` require `igraph`. A custom layout
+function can use another package: it receives ivue's normalized graph and
+must return an `n x 3` coordinate matrix in vertex order. The examples below
+use the built-in adapters:
+
+```{r optional-layout, eval=have.rgl && requireNamespace("igraph", quietly=TRUE)}
+layout.widget <- plot3D.graph(adjacency, layout = "kk", weight.type = "distance",
+                              seed = 1)
+stopifnot(inherits(layout.widget, "htmlwidget"))
+unweighted <- igraph::make_ring(4)
+unweighted.widget <- plot3D.graph(unweighted, layout = "fr", weight.type = "unweighted")
+stopifnot(inherits(unweighted.widget, "htmlwidget"))
+```
+
+`kk` treats positive weights as distances; `fr` requires positive strengths.
+No weight inversion occurs. `weight.type = "unweighted"` allows missing or unit
+weights only. Zero and negative weights may be drawn with supplied coordinates,
+but cannot be used by these layout adapters. Directed rendering, self-loops,
+and parallel edges are explicitly unsupported in this release.
+
+Use `layer3D.edges()` when you already have geometric endpoint pairs, without
+requiring a graph object. `layer3D.callback()` supports advanced rgl drawing;
+callbacks receive coordinates and row/draw IDs but must not open, close, or
+switch devices. Layers are applied before serialization, not appended to a
+live browser widget later.
+
+## Cameras, metadata, and export
+
+The widget's metadata describes the captured R scene. Reusing its initial camera
+keeps related plots comparable. Rotating a widget in the browser does not update
+this R-side camera metadata.
+
+```{r camera-comparison, eval=have.rgl}
+camera <- attr(colored, "ivue")$camera
+comparison <- plot3D.plain(X, camera = camera)
+stopifnot(identical(attr(comparison, "ivue")$row.ids, seq_len(nrow(X))))
+comparison
+```
+
+Creating or displaying a widget does not save a file. To share the colored
+saddle plot, export `colored` explicitly with `htmlwidgets::saveWidget()`.
+This example writes a temporary HTML file and removes it and its dependencies
+after checking that the export succeeded:
+
+```{r html-export, eval=have.rgl}
+out <- tempfile(fileext = ".html")
+htmlwidgets::saveWidget(colored, out, selfcontained = FALSE)
+stopifnot(file.exists(out))
+unlink(c(out, sub("\\.html$", "_files", out)), recursive = TRUE)
+```
+
+For a single portable HTML file, use `selfcontained = TRUE`; Pandoc must be
+installed. Otherwise distribute the HTML file together with its dependency
+directory. Widgets can also be used in Shiny through `rgl::rglwidgetOutput()`
+and `rgl::renderRglwidget()`; Shiny is not an ivue dependency.
+
+Default widget width follows its container, with a height of 600 pixels.
+Explicit `width` and `height` set dimensions. Long legends scroll within their
+allocated area, and `legend.show = FALSE` permits a separate application legend
+built from the same `map.colors()` result.
