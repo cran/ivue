@@ -34,7 +34,7 @@ triangle.player <- animate.frames(
   triangle.frames, edges = edges, labels = triangle.labels,
   fps = 5, col = "#C24E25", point.size = 4,
   edge.col = "#314E6ECC", edge.width = 1,
-  background.color = "#FAF7F0", height = 450
+  background.color = "#FAF7F0", height = 450, controls = FALSE
 )
 triangle.player
 
@@ -49,7 +49,7 @@ small <- animate.frames(
   list(first, X, X * 1.4),
   edges = rbind(c(1, 2), c(2, 3), c(3, 1)),
   labels = c("Two vertices", "Triangle", "Expanded triangle"),
-  fps = 1, loop = FALSE, point.size = 9, height = 280
+  fps = 1, loop = FALSE, point.size = 9, height = 280, controls = FALSE
 )
 small
 
@@ -81,7 +81,7 @@ saddle.player <- animate.frames(
   description = "Plane to saddle, with fixed colors for final saddle height.",
   point.size = 6, edge.col = "#314E6E99",
   camera = camera.zup(elevation = 25, turn = -130),
-  fps = 8, height = 450
+  fps = 8, height = 450, controls = FALSE
 )
 saddle.player
 
@@ -103,7 +103,7 @@ surface.player <- animate.frames(
   description = "Paraboloid through a plane to a saddle, with fixed colors for final saddle height.",
   point.size = 6, edge.col = "#314E6E99",
   camera = camera.zup(elevation = 25, turn = -130),
-  fps = 8, height = 450
+  fps = 8, height = 450, controls = FALSE
 )
 surface.player
 
@@ -132,9 +132,9 @@ inspect.index <- unique(as.integer(round(seq(
 ))))
 selected <- animate.frames(triangle.frames, edges,
                             frame.index = inspect.index,
-                            labels = triangle.labels, fps = 2)
+                            labels = triangle.labels, fps = 2, controls = FALSE)
 attr(selected, "ivue.animation")$frame.index
 
 ## ----all-frames, eval=FALSE---------------------------------------------------
-# all.frames <- animate.frames(my.frames, edges = my.edges, max.frames = NULL)
+# all.frames <- animate.frames(my.frames, edges = my.edges, max.frames = NULL, controls = FALSE)
 

@@ -16,7 +16,7 @@ head(map.colors(height, height.scale)$colors)
 view <- plot3D.cont(X, values = height, scale = height.scale,
                    legend.title = "Height", legend.width = 120,
                    point.size = 7, height = 340,
-                   camera = camera.zup(zoom = 0.65))
+                   camera = camera.zup(zoom = 0.65), controls = FALSE)
 view
 
 ## ----keep-first-view, eval=FALSE----------------------------------------------
@@ -35,7 +35,7 @@ local({
 ## ----recovered-camera, eval=FALSE---------------------------------------------
 # source("ivue-view.R")
 # recovered <- plot3D.plain(X, camera = view$camera, limits = view$limits,
-#                           aspect = view$aspect)
+#                           aspect = view$aspect, controls = FALSE)
 
 ## ----finding-help, eval=FALSE-------------------------------------------------
 # help(package = "ivue")

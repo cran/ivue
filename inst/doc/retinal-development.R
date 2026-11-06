@@ -54,12 +54,12 @@ camera <- camera.zup(elevation = 18, turn = -28, fov = 0, zoom = 0.57)
 #   alpha = 0.78,
 #   axes = FALSE,
 #   aspect = "equal",
-#   camera = camera
+#   camera = camera, controls = FALSE
 # )
 # umap.by.age
 
 ## ----umap-poster, echo=FALSE--------------------------------------------------
-knitr::include_graphics("figures/retinal-umap.png")
+knitr::include_graphics("guide-images/retinal-umap.png")
 
 ## ----sknn-points-code, eval=FALSE---------------------------------------------
 # sknn.points.by.age <- plot3D.groups(
@@ -70,12 +70,12 @@ knitr::include_graphics("figures/retinal-umap.png")
 #   alpha = 0.78,
 #   axes = FALSE,
 #   aspect = "equal",
-#   camera = camera
+#   camera = camera, controls = FALSE
 # )
 # sknn.points.by.age
 
 ## ----comparison-poster, echo=FALSE--------------------------------------------
-knitr::include_graphics("figures/retinal-comparison.png")
+knitr::include_graphics("guide-images/retinal-comparison.png")
 
 ## ----prepare-graph------------------------------------------------------------
 graph <- prepare.graph(retina$graph)
@@ -95,12 +95,12 @@ graph$weight.type
 #   edge.width = 1,
 #   axes = FALSE,
 #   aspect = "equal",
-#   camera = camera
+#   camera = camera, controls = FALSE
 # )
 # graph.by.age
 
 ## ----graph-poster, echo=FALSE-------------------------------------------------
-knitr::include_graphics("figures/retinal-sknn.png")
+knitr::include_graphics("guide-images/retinal-sknn.png")
 
 ## ----cell-type-code, eval=FALSE-----------------------------------------------
 # umap.by.cell.type <- plot3D.groups(
@@ -111,7 +111,7 @@ knitr::include_graphics("figures/retinal-sknn.png")
 #   alpha = 0.78,
 #   axes = FALSE,
 #   aspect = "equal",
-#   camera = camera
+#   camera = camera, controls = FALSE
 # )
 # 
 # graph.by.cell.type <- plot3D.graph(
@@ -125,7 +125,7 @@ knitr::include_graphics("figures/retinal-sknn.png")
 #   edge.width = 1,
 #   axes = FALSE,
 #   aspect = "equal",
-#   camera = camera
+#   camera = camera, controls = FALSE
 # )
 
 ## ----regeneration, eval=FALSE-------------------------------------------------

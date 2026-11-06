@@ -2,6 +2,10 @@
 title: "Point Clouds and Weighted Graphs with ivue"
 output:
   rmarkdown::html_vignette:
+    self_contained: false
+    lib_dir: ivue-libs
+    css: ivue-vignette.css
+    math_method: mathml
 vignette: >
   %\VignetteIndexEntry{Point Clouds and Weighted Graphs with ivue}
   %\VignetteEngine{knitr::rmarkdown}
@@ -18,11 +22,21 @@ have.geometry <- requireNamespace("geometry", quietly = TRUE)
 For a task index, see [Finding your way around ivue](function-guide.html);
 for small reproducible inputs, see [Example data and recipes](example-data.html).
 
-**On this page:** [A sample from a saddle](#a-sample-from-a-saddle) · [Reusable numerical colors](#reusable-numerical-colors) · [Textbook-style axes and a z-up camera](#textbook-style-axes-and-a-z-up-camera) · [A triangular mesh beneath the spheres](#a-triangular-mesh-beneath-the-spheres) · [Groups and highlighting](#groups-and-highlighting) · [A gridded reference surface](#a-gridded-reference-surface) · [Weighted graphs and geometric layers](#weighted-graphs-and-geometric-layers) · [Cameras, metadata, and export](#cameras-metadata-and-export)
+For side-by-side scientific interpretation, start with
+[Comparing scientific views](#comparing-scientific-views) below: it shows how
+to share colors, sphere sizes, coordinate scales and cameras, while distinguishing
+an exact view from a lossy projection. For the fitting questions behind those
+pictures, continue to grip's
+[embedding fidelity](https://pgajer.github.io/grip/articles/embedding-fidelity.html)
+and [local versus population embeddings](https://pgajer.github.io/grip/articles/local-global-embeddings.html)
+articles.
+
+
+**On this page:** [A sample from a saddle](#a-sample-from-a-saddle) · [Reusable numerical colors](#reusable-numerical-colors) · [Textbook-style axes and a z-up camera](#textbook-style-axes-and-a-z-up-camera) · [A triangular mesh beneath the spheres](#a-triangular-mesh-beneath-the-spheres) · [Groups and highlighting](#groups-and-highlighting) · [A gridded reference surface](#a-gridded-reference-surface) · [Weighted graphs and geometric layers](#weighted-graphs-and-geometric-layers) · [Comparing scientific views](#comparing-scientific-views) · [Cameras, metadata, and export](#cameras-metadata-and-export)
 
 ## A sample from a saddle
 
-![Static orthographic view of 250 green points on a saddle, whose opposing sides curve upward and downward.](figures/saddle-points.png)
+![Static orthographic view of 250 green points on a saddle, whose opposing sides curve upward and downward.](guide-images/saddle-points.png)
 
 The poster uses the same observations as the first interactive example below.
 It shows the saddle shape without requiring scripts or WebGL; it is a static
@@ -61,7 +75,7 @@ positive y down-right on screen. Dragging the widget can change this orientation
 ```{r saddle-plain, eval=have.rgl}
 plain <- plot3D.plain(X, col = "#197A68", point.size = 5,
                      axes = TRUE, xlab = "x", ylab = "y", zlab = "z",
-                     description = "250 green observations on a saddle; opposite sides curve upward and downward.")
+                     description = "250 green observations on a saddle; opposite sides curve upward and downward.", controls = FALSE)
 plain
 ```
 
@@ -92,7 +106,7 @@ mapping$legend
 
 ```{r saddle-continuous, eval=have.rgl}
 colored <- plot3D.cont(X, values = zs, scale = height.scale,
-                       point.size = 5, legend.title = "Saddle height")
+                       point.size = 5, legend.title = "Saddle height", controls = FALSE)
 colored
 ```
 
@@ -163,7 +177,7 @@ saddle.view <- plot3D.cont(
   axes = FALSE, aspect = "equal",
   layers = list(layer3D.axes(head.length = 0.04, head.angle = pi/8)),
   camera = camera.zup(elevation = 20, turn = -135, fov = 0, zoom = 0.4),
-  height = 500L
+  height = 500L, controls = FALSE
 )
 ```
 
@@ -219,7 +233,7 @@ actually drawn. The same layer and camera also work with `plot3D.graph()`.
 
 ## A triangular mesh beneath the spheres
 
-![Static view of triangular faces connecting the 500 saddle observations. Point colors encode height: blue below zero, yellow at zero, and red above zero.](figures/saddle-mesh.png)
+![Static view of triangular faces connecting the 500 saddle observations. Point colors encode height: blue below zero, yellow at zero, and red above zero.](guide-images/saddle-mesh.png)
 
 This poster projects the same sample and triangulation used below. It is a
 flat diagram of the geometry; it does not reproduce WebGL lighting or spheres.
@@ -259,7 +273,7 @@ saddle.mesh <- plot3D.cont(
   axes = FALSE, aspect = "equal",
   layers = list(surface, layer3D.axes()),
   camera = camera.zup(elevation = 20, turn = -135, fov = 0, zoom = 0.4),
-  height = 500L
+  height = 500L, controls = FALSE
 )
 ```
 
@@ -280,7 +294,7 @@ metric-MDS or metric-MDS-followed-by-edge-KK coordinates in the same row order:
 plot3D.cont(
   Z, values = saddle[, "z"], scale = byr.scale,
   point.type = "sphere", sphere.radius = 0.02, axes = FALSE,
-  layers = list(surface, layer3D.axes()), camera = camera.zup()
+  layers = list(surface, layer3D.axes()), camera = camera.zup(), controls = FALSE
 )
 ```
 
@@ -315,7 +329,7 @@ map.colors(groups, group.scale)$legend
 plot3D.groups(X, groups, scale = group.scale, point.size = 5,
   highlight = abs(zs) > 0.4,
   highlight.style = list(point.size = 7),
-  non.highlight.style = list(col = "gray75", alpha = 0.25))
+  non.highlight.style = list(col = "gray75", alpha = 0.25), controls = FALSE)
 ```
 
 `highlight` changes styling, not membership: all 250 rows keep their original
@@ -345,7 +359,7 @@ saddle.mesh.groups <- plot3D.groups(
   axes = FALSE, aspect = "equal",
   layers = list(surface, layer3D.axes()),
   camera = camera.zup(elevation = 20, turn = -135, fov = 0, zoom = 0.4),
-  height = 500L
+  height = 500L, controls = FALSE
 )
 ```
 
@@ -385,7 +399,7 @@ reference.view <- plot3D.cont(
   X, values = X[, "z"], scale = height.scale, point.size = 5,
   legend.title = "Saddle height", legend.width = 160, axes = FALSE,
   layers = list(reference, layer3D.axes()),
-  camera = camera.zup(zoom = 0.6), height = 450
+  camera = camera.zup(zoom = 0.6), height = 450, controls = FALSE
 )
 ```
 
@@ -424,7 +438,7 @@ plot3D.graph(graph, X = coords, values = values, edge.col = "gray50",
   edge.width = 1 + graph$edges$weight,
   point.type = "sphere", sphere.radius = 0.07,
   layers = list(layer3D.path(c(1, 2, 3), col = "#D55E00", width = 4),
-                layer3D.labels(1:4, vertices$label, offset = c(0, 0, 0.15))))
+                layer3D.labels(1:4, vertices$label, offset = c(0, 0, 0.15))), controls = FALSE)
 ```
 
 The other accepted formats are paired `adj.list`/`weight.list` lists, dense or
@@ -478,10 +492,10 @@ use the built-in adapters:
 
 ```{r optional-layout, eval=have.rgl && requireNamespace("igraph", quietly=TRUE)}
 layout.widget <- plot3D.graph(adjacency, layout = "kk", weight.type = "distance",
-                              seed = 1)
+                              seed = 1, controls = FALSE)
 stopifnot(inherits(layout.widget, "htmlwidget"))
 unweighted <- igraph::make_ring(4)
-unweighted.widget <- plot3D.graph(unweighted, layout = "fr", weight.type = "unweighted")
+unweighted.widget <- plot3D.graph(unweighted, layout = "fr", weight.type = "unweighted", controls = FALSE)
 stopifnot(inherits(unweighted.widget, "htmlwidget"))
 ```
 
@@ -497,6 +511,112 @@ callbacks receive coordinates and row/draw IDs but must not open, close, or
 switch devices. Layers are applied before serialization, not appended to a
 live browser widget later.
 
+## Comparing scientific views
+
+A comparison is easier to interpret when display changes are separated from
+changes to the underlying coordinates. Use the same observations and a stable
+color definition, then decide explicitly which scales should be shared. A
+camera can make different structures look similar; a different camera can make
+the same structure look different.
+
+| Choice | What to keep consistent | What it does not establish |
+|:--|:--|:--|
+| Colors | Reuse one scale and the same variable or category dictionary | Color agreement does not imply geometric agreement |
+| Coordinate units | Use `aspect = "equal"`; share limits when units are comparable | Equal axis scales do not recover discarded dimensions |
+| Spheres | Specify one radius in coordinate units | Automatic radii can change between subsets |
+| Camera | Use the same initial camera and viewport dimensions | A shared camera does not align independently fitted embeddings |
+| Labels | State whether coordinates are original, projected, or fitted | “3D view” alone does not describe how it was generated |
+
+Here we reuse the 500 surface-area-sampled saddle observations above. We rotate
+and center them with all three PCA coordinates, which preserves Euclidean
+pair distances exactly. We then set the third PCA coordinate to zero. This
+second view is a two-dimensional projection displayed in a 3D widget; it loses
+information even though it contains exactly the same observations.
+
+```{r comparison-coordinates}
+comparison.pca <- prcomp(saddle, center = TRUE, scale. = FALSE)
+comparison.exact <- comparison.pca$x
+comparison.projected <- comparison.exact
+comparison.projected[, 3] <- 0
+original.dist <- as.numeric(dist(saddle))
+exact.dist <- as.numeric(dist(comparison.exact))
+projected.dist <- as.numeric(dist(comparison.projected))
+stopifnot(all(original.dist > 0),
+          max(abs(original.dist - exact.dist)) < 1e-10,
+          all(projected.dist <= original.dist + 1e-10))
+relative.error <- (projected.dist - original.dist) / original.dist
+short.pairs <- original.dist <= quantile(original.dist, 0.1)
+comparison.quality <- data.frame(
+  View = c("All three PCA coordinates (exact)", "First two PCA coordinates (projection)"),
+  RMS_relative_error_percent = c(100 * sqrt(mean(((exact.dist-original.dist)/original.dist)^2)),
+                                  100 * sqrt(mean(relative.error^2))),
+  Shortest_decile_RMS_percent = c(0, 100 * sqrt(mean(relative.error[short.pairs]^2))),
+  Squared_length_retained_percent = c(100, 100 * sum(comparison.projected^2) / sum(comparison.exact^2)))
+knitr::kable(comparison.quality, digits = 2, row.names = FALSE,
+  col.names = c("View", "RMS error (%)", "Short pairs (%)", "Squared length retained (%)"))
+```
+
+The error uses **all 124,750 unordered pairs**, comparing drawn Euclidean
+distance with the original three-coordinate distance. The shortest-decile
+column uses the shortest 10% of original distances, including threshold ties.
+Squared length retained describes variation about the centroid; it is not a
+guarantee that individual pair distances are accurate. These are deterministic
+projection diagnostics, not a fitted MDS stress or a biological comparison.
+
+For the two widgets we reuse `byr.scale`, so sphere colors continue to encode
+**original saddle height**. They do not switch to the third displayed PCA
+coordinate, which is zero in the projected view. Limits are shared, axes have
+equal scale, and sphere radius and initial camera are identical. Drag to rotate
+and scroll to zoom; the two widgets can be manipulated independently.
+
+```{r comparison-view-settings, eval=have.rgl}
+comparison.limits <- t(apply(rbind(comparison.exact, comparison.projected), 2, range))
+comparison.span <- max(comparison.limits[, 2] - comparison.limits[, 1])
+comparison.limits[, 1] <- comparison.limits[, 1] - 0.08 * comparison.span
+comparison.limits[, 2] <- comparison.limits[, 2] + 0.08 * comparison.span
+comparison.camera <- camera.zup(elevation = 25, turn = -125, zoom = 0.55)
+comparison.view <- function(coordinates, description) {
+  plot3D.cont(coordinates, values = saddle[, "z"], scale = byr.scale,
+    point.type = "sphere", sphere.radius = 0.02,
+    aspect = "equal", limits = comparison.limits, camera = comparison.camera,
+    axes = FALSE, xlab = "", ylab = "", zlab = "",
+    legend.title = "Original saddle height", legend.width = 180,
+    controls = FALSE, height = 450L, description = description)
+}
+comparison.exact.widget <- comparison.view(comparison.exact,
+  "Exact view: all three PCA coordinates preserve every original pair distance.")
+comparison.projected.widget <- comparison.view(comparison.projected,
+  "Approximate view: the third PCA coordinate is set to zero; colors still show original height.")
+```
+
+### Exact coordinates, rotated into a common frame
+
+```{r comparison-exact-display, eval=have.rgl, echo=FALSE}
+comparison.exact.widget
+```
+
+### Lossy projection, with the same display settings
+
+```{r comparison-projected-display, eval=have.rgl, echo=FALSE}
+comparison.projected.widget
+```
+
+For independently fitted embeddings, matching cameras is insufficient because
+the coordinates may differ by translation, rotation, or reflection. An
+orthogonal alignment using corresponding observations can remove those
+arbitrary frame differences without changing pair distances. If alignment also
+rescales coordinates, disclose that separately: scale affects the distances
+being compared. Alignment cannot remove nonlinear distortion.
+
+Use common limits when comparing sizes in the same units. If each plot is
+framed separately to reveal detail, say so and do not interpret apparent
+screen size as a distance comparison. When normalizations or distance targets
+change units, explain those changes before drawing size conclusions.
+For a worked fitting comparison, see grip's
+[embedding fidelity](https://pgajer.github.io/grip/articles/embedding-fidelity.html)
+and [local versus population fits](https://pgajer.github.io/grip/articles/local-global-embeddings.html)
+articles.
+
 ## Cameras, metadata, and export
 
 The widget's metadata describes the captured R scene. Reusing its initial camera
@@ -505,7 +625,7 @@ this R-side camera metadata.
 
 ```{r camera-comparison, eval=have.rgl}
 camera <- attr(colored, "ivue")$camera
-comparison <- plot3D.plain(X, camera = camera)
+comparison <- plot3D.plain(X, camera = camera, controls = FALSE)
 stopifnot(identical(attr(comparison, "ivue")$row.ids, seq_len(nrow(X))))
 comparison
 ```

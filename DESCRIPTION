@@ -1,6 +1,6 @@
 Package: ivue
 Title: Interactive 3D Visualization of Data and Graphs
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: 
     person("Pawel", "Gajer", email = "pgajer@gmail.com",
            role = c("aut", "cre"))
@@ -25,10 +25,10 @@ Suggests: grip, rgl, magick, shiny, geometry, igraph, Matrix, callr,
         pkgload, testthat (>= 3.1.7), knitr, rmarkdown
 VignetteBuilder: knitr
 Config/testthat/edition: 3
-Config/roxygen2/version: 8.0.0
+Config/roxygen2/version: 8.1.1
 NeedsCompilation: no
-Packaged: 2026-09-18 18:05:06 UTC; pgajer
+Packaged: 2026-11-06 14:55:48 UTC; runner
 Author: Pawel Gajer [aut, cre]
 Maintainer: Pawel Gajer <pgajer@gmail.com>
 Repository: CRAN
-Date/Publication: 2026-09-29 13:40:19 UTC
+Date/Publication: 2026-11-06 20:50:18 UTC
